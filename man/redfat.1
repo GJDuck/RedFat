@@ -1,0 +1,364 @@
+.de Sp \" Vertical space (when we can't use .PP)
+.if t .sp .5v
+.if n .sp
+..
+.de Vb \" Begin verbatim text
+.ft CW
+.nf
+.ne \\$1
+..
+.de Ve \" End verbatim text
+.ft R
+.fi
+..
+.TH "REDFAT" 1 "2022-03-01" "" "redfat"
+.SH NAME
+\fBredfat\fR \- binary hardening system
+.SH SYNOPSIS
+redfat [\fB-Xlowfat\fR[={true|false}]]
+       [\fB-Xreads\fR[={true|false}]
+       [\fB-Xwrites\fR[={true|false}]
+       [\fB-Xstack\fR[={true|false}]
+       [\fB-Xframe\fR[={true|false}]
+       [\fB-Xglobal\fR[={true|false}]
+       [\fB-Xsize\fR[={true|false}]
+       [\fB-Xadjust\fR[={true|false}]
+       [\fB-Xdebug\fR[={true|false}]
+       [\fB-Xallowlist-gen\fR[=filename]]
+       [\fB-Xallowlist-use\fR[=filename]]
+       [\fB-Xallowlist-mode\fR=MODE]
+       [\fB-Obatch\fR=N]
+       [\fB-Omerge\fR[={true|false}]]
+       [\fB-Oscratch\fR[={true|false}]]
+       [\fB-Oflags\fR[={true|false}]]
+       [\fB-Ostacks\fR[={true|false}]]
+       [\fB-Oframe\fR[={true|false}]]
+       [\fB-Oglobal\fR[={true|false}]]
+       [\fB-Osysv\fR[={true|false}]]
+       [\fB-force\fR[={true|false}]]
+       [\fB-o\fR=outfile]
+       [\fB-P\fR]
+       [\fB-v\fR]
+       binary
+       [-- options]
+.SH DESCRIPTION
+\fBRedfat\fR is a tool for automatically hardening x86_64 ELF binaries against
+memory errors, such as buffer overflows and use-after-free.
+\fBRedfat\fR tool is based on static binary rewriting which inserts memory
+error checking into binary code without access to the original source code.
+Unlike other binary memory error detection tools, \fBredfat\fR is primarily
+designed for the hardening use case, as opposed to testing or debugging.
+.PP
+The \fBredfat\fR binary hardening system is based on two complementary memory
+error checking technologies:
+.PP
+.RS
+\(em
+Poisoned Redzones (Red)
+.br
+\(em
+Low Fat Pointers (Fat)
+.RE
+.PP
+Poisoned memory (including poisoned redzones) ensures that all memory access
+must accesses a valid object, and not unallocated (redzone or free) memory.
+Low Fat Pointers ensure that pointer arithmetic itself is valid, and cannot
+be used by an attacker to transform a valid pointer from one object to
+a valid pointer to another.
+The latter is important for hardening, since many attacker exploit overflows
+from one object into another.
+.SH BASIC USAGE
+To use \fBredfat\fR, simply pass a binary name into the \fBredfat\fR tool.
+For example, we can automatically harden the \fBxterm\fR binary against
+memory errors using the following simple command:
+.Sp
+.Vb 1
+\&        $ redfat xterm
+.Ve
+.Sp
+This will generate a hardened \fBxterm.redfat\fR binary in the current
+directory.
+To run the hardened binary, the \fBlibredfat.so\fR library must be
+\fBLD_PRELOAD\fR'ed, as follows:
+.Sp
+.Vb 1
+\&        $ LD_PRELOAD=/usr/share/redfat/libredfat.so ./xterm.redfat
+.Ve
+.Sp
+The \fBlibredfat.so\fR library replaces the default \fBmalloc\fR
+implementation with a new version that supports memory error checking.
+The \fBxterm.redfat\fR binary should run normally, except it will now abort
+if a heap memory error is detected, thereby hardening against potential
+attacks.
+.SH ADVANCED USAGE
+The basic \fBredfat\fR usage may generate false detections
+(i.e., false error reports) for some binaries.
+This occurs when the binary deliberately creates out-of-bounds pointers,
+which are indistinguishable from real memory errors under low-fat pointer
+checking.
+Fortunately, such false detections can often be mitigated using
+automatic \fIallowlist generation\fR.
+To do so, first instrument the binary using the \fB-Xallowlist-gen\fR option:
+.Sp
+.Vb 1
+\&        $ redfat -Xallowlist-gen xterm
+.Ve
+.Sp
+This will generate an instrumented \fBxterm.gen\fR binary.
+Next, run the instrumented binary on one (or more) benign tests to
+automatically generate an \fBxterm.allow\fR file:
+.Sp
+.Vb 1
+\&        $ LD_PRELOAD=/usr/share/redfat/libredfat.so ./xterm.gen
+.Ve
+.Sp
+Finally, regenerate the hardened binary, but this time using the allowlist to
+mitigate false detections:
+.Sp
+.Vb 1
+\&        $ redfat -Xallowlist-use xterm
+.Ve
+.Sp
+This version uses dynamic information collected during testing in order to
+avoid false positives.
+The stronger the test suite and coverage, the stronger the finalized
+instrumentation will be.
+.SH "OPTIONS"
+.TP
+\fB-Xlowfat\fR[={true|false}]
+Enables (disables) low-fat pointer checking.
+The default is \fBenabled\fR.
+.TP
+\fB-Xreads\fR[={true|false}]
+Enables (disables) memory read checking.
+Note that since (1) read checking is expensive, and (2) most security attacks
+rely on a memory \fIwrite\fR error, read checking is \fBdisabled\fR by
+default.
+.TP
+\fB-Xwrites\fR[={true|false}]
+Enables (disables) memory write checking.
+The default is \fBenabled\fR.
+.TP
+\fB-Xstack\fR[={true|false}]
+Enables (disables) stack pointer (%rsp) checking.
+The default is \fBenabled\fR.
+.TP
+\fB-Xframe\fR[={true|false}]
+Enables (disables) frame pointer (%rsp) checking.
+The default is \fBenabled\fR.
+.TP
+\fB-Xglobal\fR[={true|false}]
+Enables (disables) global pointer (%rip/no-base) checking.
+The default is \fBenabled\fR.
+.TP
+\fB-Xsize\fR[={true|false}]
+Enables (disables) paranoid size metadata checking.
+The default is \fBenabled\fR.
+.TP
+\fB-Xadjust\fR[={true|false}]
+Enables (disables) experimental base adjustment mode.
+This mode uses static analysis in an attempt to find a more accurate base
+pointer for low-fat checking.
+However, the static analysis makes some assumptions so the mode is
+\fBdisabled\fR by default.
+.TP
+\fB-Xdebug\fR[={true|false}]
+Enables (disables) debug-mode checking.
+This mode enables more useful error messages on detected errors, but also
+uses a significantly slower instrumentation.
+The default is \fBdisabled\fR.
+.TP
+\fB-Xallowlist-gen\fR[=filename]
+Enables allowlist generation instrumentation.
+If specified, uses \fBfilename\fR as the allowlist.
+.TP
+\fB-Xallowlist-use\fR[=filename]
+Enable the use of the given allowlist for \fB-Xlowfat\fR checking.
+If specified, uses \fBfilename\fR as the allowlist.
+.TP
+\fB-Xallowlist-mode\fR=MODE
+Set the allowlist MODE string.
+The index 0..3 represents the observed state during allowlist generation:
+.br
+(0=lowfat-unsafe, 1=lowfat-safe, 2=nonfat-only, 3=not-reached).
+.br
+The corresponding character represents the instrumentation mode:
+.br
+(-=no-instrumentation, R=redzone-only, L=redzone+lowfat).
+.br
+The default mode is \fBRLRR\fR meaning low-fat checking is only used for
+observed lowfat-safe memory access.
+.TP
+\fB-Obatch\fR=N
+Group memory error checks into batches of size N, where possible.
+The default is \fBN=50\fR.
+.TP
+\fB-Omerge\fR[={true|false}]
+Enables (disables) the merging of adjacent memory error checks, where possible.
+The default is \fBenabled\fR.
+.TP
+\fB-Oscratch\fR[={true|false}]
+Enables (disables) using to-be-clobbered registers as scratch registers,
+where possible.
+The default is \fBenabled\fR.
+.TP
+\fB-Oflags\fR[={true|false}]
+Enables (disables) clobbering the flags (%eflags) register, if it is to be
+clobbered anyway.
+The default is \fBenabled\fR.
+.TP
+\fB-Ostack\fR[={true|false}]
+Enables (disables) the elimination of stack pointer (%rsp) memory error
+checking that cannot reach the heap.
+Since the \fBredfat\fR tool can only protect heap objects, it is usually
+pointless to instrument stack memory access if the heap is out-of-range.
+This assumes the stack is in its usual position which is far from the heap.
+The default is \fBenabled\fR.
+.TP
+\fB-Oframe\fR[={true|false}]
+Enables (disables) the elimination of frame pointer (%rbp) memory error
+checking that cannot reach the heap.
+This assumes %rbp is actually used as the frame pointer (e.g., the binary was
+not compiled with \fB-fomit-frame-pointer\fR).
+The default is \fBdisabled\fR.
+.TP
+\fB-Oglobal\fR[={true|false}]
+Enables (disables) the elimination of global pointer (no-base/%rip) memory
+error checking that cannot reach the heap.
+This assumes that %rip/globals are in their usual position which is far from
+the heap.
+The default is \fBenabled\fR.
+.TP
+\fB-Osysv\fR[={true|false}]
+Enables (disables) additional optimizations assuming that the binary follows
+the Sys V ABI.
+This only has a very small impact, so the default is \fBdisabled\fR.
+.TP
+\fB-force\fR[={true|false}]
+Enables (disables) forcibly instrumenting the binary, even when the binary is
+not suitable for \fBredfat\fR.
+The default is \fBdisabled\fR.
+.TP
+\fB-o\fR=outfile
+Uses \fBoutfile\fR as the output binary name.
+.TP
+\fB-P\fR
+Enables performance profiling, in addition to the normal memory error
+checking.
+.TP
+\fB-v\fR
+Enables verbose debugging output.
+.TP
+\fB--\fR options
+Passes the additional \fBoptions\fR to the \fBe9tool\fR backend.
+.SH "LIMITATIONS"
+Binary instrumentation is generally very difficult due to the lack of
+information compared to source code.
+As such, \fBredfat\fR attempts to harden the binary as much as is reasonably
+possible without risking compatibility or introducing new bugs.
+However, this also means that \fBredfat\fR's memory error checking is not
+perfect.
+The main limitations of \fBredfat\fR are the following:
+.PP
+\(em
+The low-fat pointer checking is limited to x86_64 memory operands only.
+Other forms of pointer arithmetic, such as explicit \fBadd\fR instructions,
+can be ambiguous at the binary-level and are not protected.
+That said, protecting memory operands still covers many common cases, so is
+still worthwhile.
+.PP
+\(em
+The \fBredfat\fR tool can only protect against object overflows and
+use-after-free.
+Intra-object (a.k.a. sub-object) overflows and type confusion error detection
+both depend on type information, which is generally unavailable at the binary
+level, so is not protected.
+.PP
+\(em
+The \fBredfat\fR tool can only replace the \fBmalloc\fR implementation
+meaning that only heap objects are protected.
+That said, most binaries already partially mitigate stack overwrites with
+stack canaries.
+Also, the binary itself needs to be compatible with the \fBLD_PRELOAD\fR 
+trick.
+.PP
+\(em
+The \fBredfat\fR tool will only instrument the binary that is explicitly
+passed to it, and not any additional library dependency.
+However, it is possible to separately instrument any shared library
+dependency.
+.PP
+\(em
+\fBRedfat\fR is not guaranteed to solve specific threats and its usage must be
+independently accessed.
+Rather, \fBredfat\fR is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+.SH "TROUBLESHOOTING"
+.TP
+\fBerror: binary "program" exports a custom "malloc" function\fR
+This occurs when an executable defines its own \fBmalloc\fR function and
+exports it.
+If this occurs, the \fBLD_PRELOAD\fR trick will not replace this custom
+malloc, meaning that the instrumented binary will not be protected.
+This error can be disabled with the \fB-force\fR option.
+.TP
+\fBwarning: failed to disassemble byte 0xXX at address 0xYYYY ...\fR
+This warning occurs when data is detected in the code section(s).
+This can be fixed by manually excluding specific address ranges from
+disassembly using the E9Tool \fB-E\fR option, e.g.:
+.Sp
+.Vb 1
+\&        $ redfat xterm -- -E ADDR1..ADDR2
+.Ve
+.Sp
+Here, \fBADDR1..ADDR2\fR is the address range to exclude from disassembly.
+.TP
+\fBwarning: the number of virtual mappings (XXX) exceeds ...\fR
+This occurs when the instrumented binary uses too many mappings.
+This can be fixed by increasing the mapping size to a suitable new limit:
+.Sp
+.Vb 1
+\&        $ sudo sysctl -w vm.max_map_count=ZZZ
+.Ve
+.Sp
+Alternatively, the issue can be fixed by decreasing the compression level
+(at the cost of larger instrumented binary file sizes) using the E9Tool
+\fB-c\fR option, e.g.:
+.Sp
+.Vb 1
+\&        $ redfat xterm -- -c N
+.Ve
+.Sp
+Where \fBN\fR is a number \fB0..9\fR (lower numbers mean less compression).
+.TP
+\fBe9patch loader error: mmap(...) failed (errno=12)\fR
+This error occurs when you attempt to run an instrumented binary that uses
+too many mappings.
+See above for the problem description and solution.
+.TP
+\fBthe REDFAT runtime ... has not been LD_PRELOAD'ed\fR
+As the error message explains, this error occurs when you attempt to run an
+instrumented binary without \fBLD_PRELOAD\fR'ing the \fBlibredfat.so\fR binary.
+You can also define \fBREDFAT_DISABLE=1\fR to run the binary anyway (but
+with the instrumentation costs and no memory error protection).
+.TP
+\fBout-of-bounds/use-after-free error detected!\fR
+A memory error was detected.
+If the binary was \fInot\fR instrumented with \fB-Xallowlist-use\fR, then this
+could be a false detection.
+Otherwise, this could be a genuine error and should be investigated.
+.TP
+\fBIllegal Instruction\fR
+This could be a memory error detected by \fBredfat\fR if the program resets
+the default \fBSIGILL\fR signal handler.
+.TP
+\fBSegmentation Fault\fR
+"Wildly" out-of-bounds errors may result in a \fBSIGSEGV\fR rather than a
+\fBSIGILL\fR.
+Otherwise, this could be a bug and should be reported.
+.SH "AUTHORS"
+\fBRedfat\fR is written by Gregory J. Duck <gregory@comp.nus.edu.sg>.
+.PP
+The initial prototyping and testing of \fBredfat\fR was completed by
+Yuntong Zhang <yuntong@comp.nus.edu.sg>
