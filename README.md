@@ -1,4 +1,4 @@
-# RedFat -- Binary Hardening System
+# RedFat -- A Binary Hardening System
 
 RedFat is a tool for automatically hardening Linux `x86_64` ELF binary
 executables against memory errors, including *buffer overflows* and
@@ -204,7 +204,7 @@ environment variables:
   Default: *disabled*.
 * `REDFAT_CANARY=1`: Enables a randomized canary to be placed at the end of
   all allocated objects.
-  The canary provides additional protection for out-of-bounds write errors
+  The canary provides additional protection against out-of-bound write errors
   that may go undetected in uninstrumented code.
   This consumes an additional 8 bytes per allocation.
   Note that a canary is always placed at the beginning of all allocated
@@ -420,7 +420,7 @@ The initial prototyping and testing of RedFat was completed by Yuntong Zhang.
 
 ## See Also
 
-* [LibRedFat](https://github.com/GJDuck/libredfat): A hardened malloc * implementation.
+* [LibRedFat](https://github.com/GJDuck/libredfat): A hardened malloc implementation.
 * [E9Patch](https://github.com/GJDuck/e9patch): A scalable binary rewriting system.
 * [LowFat](https://github.com/GJDuck/LowFat): Lean C/C++ bounds checking with low-fat pointers
 
