@@ -33,7 +33,7 @@ fi
 set -e
 
 E9_VERSION=889a412ecdbf072d3626b1cc44e59439b030157c
-LIB_VERSION=e745508a7b1b42a8f1c081f14036c9a67d1c138a
+LIB_VERSION=1c8c703303e6de11b6a6abd67323b5556e25c57f
 
 # STEP (1): install dependencies if necessary:
 if [ ! -x e9patch-$E9_VERSION/e9patch ]
