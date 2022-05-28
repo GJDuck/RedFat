@@ -2248,31 +2248,26 @@ extern intptr_t e9_plugin_match_v1(const Context *context)
 }
 
 /*
+ * Patch template.
+ */
+extern void e9_plugin_code_v1(const Context *context)
+{
+    fprintf(context->out, "\"$redfat\",");
+}
+
+/*
  * Patching.
  */
-extern void e9_plugin_patch_v1(const Context *context, Phase phase)
+extern void e9_plugin_patch_v1(const Context *context)
 {
     RedFat *cxt = (RedFat *)context->context;
-
-    switch (phase)
-    {
-        case PHASE_CODE:
-            fprintf(context->out, "\"$redfat\",");
-            return;
-        case PHASE_METADATA:
-        {
-            auto i = cxt->batches.find(context->I->address);
-            if (i == cxt->batches.end())
-                error("no such batch for address 0x%lx", context->I->address);
-            const Batch &batch = i->second;
-            fprintf(context->out, "\"$redfat\":[");
-            emitCHECK(context->out, cxt->elf, batch.entries, batch.adjusts,
-                batch.scratch, batch.clobber_flags);
-            fputc(']', context->out);
-            return;
-        }
-        default:
-            return;
-    }
+    auto i = cxt->batches.find(context->I->address);
+    if (i == cxt->batches.end())
+        error("no such batch for address 0x%lx", context->I->address);
+    const Batch &batch = i->second;
+    fprintf(context->out, "\"$redfat\":[");
+    emitCHECK(context->out, cxt->elf, batch.entries, batch.adjusts,
+        batch.scratch, batch.clobber_flags);
+    fputc(']', context->out);
 }
 
