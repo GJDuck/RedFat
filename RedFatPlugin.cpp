@@ -1461,7 +1461,7 @@ static unsigned strToInt(const char *str)
 /*
  * Initialization.
  */
-extern void *e9_plugin_init_v1(const Context *context)
+extern void *e9_plugin_init(const Context *context)
 {
     static const struct option long_options[] =
     {
@@ -2214,7 +2214,7 @@ static void analyzeBatches(RedFat *cxt)
 /*
  * Events.
  */
-extern void e9_plugin_event_v1(const Context *context, Event event)
+extern void e9_plugin_event(const Context *context, Event event)
 {
     RedFat *cxt = (RedFat *)context->context;
     switch (event)
@@ -2240,7 +2240,7 @@ extern void e9_plugin_event_v1(const Context *context, Event event)
  * Matching.
  * (return `true' iff we should instrument this instruction)
  */
-extern intptr_t e9_plugin_match_v1(const Context *context)
+extern intptr_t e9_plugin_match(const Context *context)
 {
     RedFat *cxt = (RedFat *)context->context;
     auto i = cxt->batches.find(context->I->address);
@@ -2250,7 +2250,7 @@ extern intptr_t e9_plugin_match_v1(const Context *context)
 /*
  * Patch template.
  */
-extern void e9_plugin_code_v1(const Context *context)
+extern void e9_plugin_code(const Context *context)
 {
     fprintf(context->out, "\"$redfat\",");
 }
@@ -2258,7 +2258,7 @@ extern void e9_plugin_code_v1(const Context *context)
 /*
  * Patching.
  */
-extern void e9_plugin_patch_v1(const Context *context)
+extern void e9_plugin_patch(const Context *context)
 {
     RedFat *cxt = (RedFat *)context->context;
     auto i = cxt->batches.find(context->I->address);

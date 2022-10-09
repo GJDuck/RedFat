@@ -482,7 +482,7 @@ int main(int argc, char **argv)
     if (option_xallowlist_gen)
     {
         command += "-P 'redfat_allowlist_check("
-            "static addr,"
+            "(static)addr,"
             "mem[0].base,"
             "&mem[0],"
             "mem[0].size,"
@@ -494,7 +494,7 @@ int main(int argc, char **argv)
     else if (option_xdebug)
     {
         command += "-P 'redfat_debug_check("
-            "static addr,"
+            "(static)addr,"
             "mem[0].base,"
             "&mem[0],"
             "mem[0].size,"
