@@ -587,10 +587,8 @@ void init(int argc, char **argv, char **envp, void *dynamic,
     if (msync((void *)MAGICS, REDFAT_PAGE_SIZE, MS_ASYNC) == 0 ||
             errno != ENOMEM)
     {
-        if (redfat_disabled)
-            redfat_error("the REDFAT runtime (%slibredfat.so%s) has "
-                "been LD_PRELOAD'ed but REDFAT_DISABLE is defined",
-                (redfat_isatty? GREEN: ""), (redfat_isatty? WHITE: ""));
+        if (redfat_dso || redfat_disabled)
+            return;
         struct sigaction action;
         memset(&action, 0x0, sizeof(action));
         action.sa_sigaction  = redfat_sigaction_handler;
@@ -603,7 +601,7 @@ void init(int argc, char **argv, char **envp, void *dynamic,
 
     // We are not running with libredfat.so.  Warn the user, and map
     // dummy tables so the instrumentation will not crash.
-    if (!redfat_disabled)
+    if (!redfat_disabled && !redfat_dso)
         redfat_error("the REDFAT runtime (%slibredfat.so%s) has not been "
             "LD_PRELOAD'ed\n"
             "              (define REDFAT_DISABLE=1 to disable this error "

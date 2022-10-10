@@ -942,7 +942,7 @@ static void emitCHECK(FILE *stream, const ELF *elf,
         getStats(entries, &stats);
         if (!clobberFlags)
         {
-            emitSAVE(stream, 0x48, REGISTER_RAX);
+            emitSAVE(stream, 0x70, REGISTER_RAX);
             fprintf(stream, "%u,%u,%u,", 0x0f, 0x90, 0xc0);
             fprintf(stream, "%u,", 0x9f);
         }
@@ -993,7 +993,7 @@ static void emitCHECK(FILE *stream, const ELF *elf,
         {
             fprintf(stream, "%u,%u,", 0x04, 0x7f);
             fprintf(stream, "%u,", 0x9e);
-            emitRESTORE(stream, 0x48, REGISTER_RAX);
+            emitRESTORE(stream, 0x70, REGISTER_RAX);
         }
     }
 
@@ -1001,7 +1001,7 @@ static void emitCHECK(FILE *stream, const ELF *elf,
     {
         save_scratch = true;
         regScratch[0] = REGISTER_RAX;
-        emitSAVE(stream, 0x48, regScratch[0]);
+        emitSAVE(stream, 0x70, regScratch[0]);
     }
     if (save_rcx)
         emitSAVE(stream, 0x50, REGISTER_RCX);
@@ -1035,7 +1035,7 @@ static void emitCHECK(FILE *stream, const ELF *elf,
         {
             if (save_scratch && (base == regScratch[0] ||
                     index == regScratch[0]))
-                emitRESTORE(stream, 0x48, regScratch[0]);
+                emitRESTORE(stream, 0x70, regScratch[0]);
             if (save_rcx && (base == REGISTER_RCX || index == REGISTER_RCX))
                 emitRESTORE(stream, 0x50, REGISTER_RCX);
             if (save_rdx && (base == REGISTER_RDX || index == REGISTER_RDX))
@@ -1248,7 +1248,7 @@ static void emitCHECK(FILE *stream, const ELF *elf,
     }
 
     if (save_scratch)
-        emitRESTORE(stream, 0x48, regScratch[0]);
+        emitRESTORE(stream, 0x70, regScratch[0]);
     if (save_rcx)
         emitRESTORE(stream, 0x50, REGISTER_RCX);
     if (save_rdx)

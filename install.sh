@@ -31,7 +31,7 @@ else
 fi
 
 NAME=redfat
-VERSION=0.2.0
+VERSION=`cat VERSION`
 
 if [ ! -x install/redfat.bin ]
 then

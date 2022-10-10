@@ -39,6 +39,9 @@
 
 #include <string>
 
+#define STRING(s)               STRING_2(s)
+#define STRING_2(s)             #s
+
 static bool option_is_tty = false;
 
 /*
@@ -111,6 +114,7 @@ enum Option
     OPTION_OSYSV,
     OPTION_FORCE,
     OPTION_HELP,
+    OPTION_VERSION,
 };
 
 static bool strToBool(const char *str)
@@ -201,7 +205,9 @@ static void usage(const char *progname)
         "\t-v\n"
         "\t\tEnable verbose output [disabled]\n"
         "\t-help\n"
-        "\t\tPrint this message\n\n", stdout);
+        "\t\tPrint this message\n"
+        "\t--version\n"
+        "\t\tPrint version information\n\n", stdout);
 }
 
 int main(int argc, char **argv)
@@ -233,6 +239,7 @@ int main(int argc, char **argv)
         {"Osysv",          optional_argument, nullptr, OPTION_OSYSV},
         {"force",          optional_argument, nullptr, OPTION_FORCE},
         {"help",           no_argument,       nullptr, OPTION_HELP},
+        {"version",        no_argument,       nullptr, OPTION_VERSION},
         {nullptr,          no_argument,       nullptr, 0},
     };
 
@@ -344,6 +351,9 @@ int main(int argc, char **argv)
                 break;
             case OPTION_HELP:
                 usage(argv[0]);
+                exit(EXIT_SUCCESS);
+            case OPTION_VERSION:
+                printf("RedFat " STRING(VERSION) "\n");
                 exit(EXIT_SUCCESS);
             case 'P':
                 option_profile = true;

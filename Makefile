@@ -2,7 +2,7 @@ CXX=g++
 CXXFLAGS=-std=c++11 
 
 redfat.bin: redfat.bin.cpp
-	$(CXX) $(CXXFLAGS) -o redfat.bin -O2 redfat.bin.cpp 
+	$(CXX) $(CXXFLAGS) -DVERSION=`cat VERSION` -o redfat.bin -O2 redfat.bin.cpp 
 	strip redfat.bin
 
 RedFatPlugin.so: RedFatPlugin.cpp
