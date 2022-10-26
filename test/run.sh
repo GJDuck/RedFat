@@ -40,7 +40,7 @@ fi
 
 set -x
 
-LD_PRELOAD=$PWD/../libredfat.so gcc -O2 -o test test.c
+LD_PRELOAD=$PWD/../libredfat.so gcc -fno-builtin -O2 -o test test.c
 LD_PRELOAD=$PWD/../libredfat.so ../redfat.bin -Xreads ./test
 LD_PRELOAD=$PWD/../libredfat.so ./test.redfat 
 

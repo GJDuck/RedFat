@@ -66,6 +66,10 @@ static __attribute__((__noinline__)) void use(size_t x)
 {
     asm ("": : "r"(x): "memory");
 }
+static __attribute__((__noinline__)) void use2(void *x)
+{
+    asm ("": : "r"(x): "memory");
+}
 static __attribute__((__noinline__)) size_t unknown(size_t size)
 {
     return size;
@@ -398,12 +402,12 @@ static void memset8x8(intptr_t ptr, ssize_t offset)
 static void memcpy8x8(intptr_t ptr, ssize_t offset)
 {
     const char mem[8] = "ABCDEFG";
-    memcpy((void *)(ptr + offset), mem, unknown(sizeof(mem)));
+    use2(memcpy((void *)(ptr + offset), mem, unknown(sizeof(mem))));
 }
 static void memcpy8x8f(intptr_t ptr, ssize_t offset)
 {
     char mem[8];
-    memcpy(mem, (void *)(ptr + offset), unknown(sizeof(mem)));
+    use2(memcpy(mem, (void *)(ptr + offset), unknown(sizeof(mem))));
 }
 static void memcmp8x8(intptr_t ptr, ssize_t offset)
 {
