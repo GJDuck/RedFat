@@ -138,49 +138,43 @@ static REDFAT_NOINLINE void redfat_log(const char *format, ...)
 /* ALLOWLIST                                                    */
 /****************************************************************/
 
-// Reuse the e9patch RB-tree implementation:
-#define RB_AUGMENT(_)       /* NOP */
-#include "E9PATCH/examples/rbtree.c"
-
-struct ALLOWNODE;
-typedef struct ALLOWNODE ALLOWNODE;
-
 struct ALLOWTREE
 {
-    ALLOWNODE *root;
+    void *root;
 };
-typedef struct ALLOWTREE ALLOWTREE;
-
 struct ALLOWNODE
 {
     const void *addr;
-    RB_ENTRY(ALLOWNODE) entry;
-    int color;
-    int8_t allow;       // 0 = false detection; do not allow
+    int allow;          // 0 = false detection; do not allow
                         // 1 = heap ptr observed; no false detection
                         // 2 = no heap ptr observed
 };
 
-static int allow_compare(const ALLOWNODE *n, const ALLOWNODE *m)
+static mutex_t allowlist_mutex  = MUTEX_INITIALIZER;
+static bool    allowlist_inited = false;
+static FILE   *allowlist_stream = NULL;
+static ALLOWTREE allowlist_root = {NULL};
+
+static int allow_compare(const void *n, const void *m)
 {
-    if (n->addr < m->addr)
+    const ALLOWNODE *N = (ALLOWNODE *)n, *M = (ALLOWNODE *)m;
+    if (N->addr < M->addr)
         return -1;
-    if (n->addr > m->addr)
+    if (N->addr > M->addr)
         return 1;
     return 0;
 }
 
-RB_GENERATE_STATIC(ALLOWTREE, ALLOWNODE, entry, allow_compare);
-#define allow_find(t, n)        ALLOWTREE_RB_FIND((t), (n))
-#define allow_insert(t, n)      ALLOWTREE_RB_INSERT((t), (n))
+static inline ALLOWNODE *allow_find(const ALLOWNODE *key)
+{
+    void *node = tfind(key, &allowlist_root.root, allow_compare);
+    return (node == NULL? NULL: *(ALLOWNODE **)node);
+}
+#define allow_insert(key)                   \
+    (void)tsearch((key), &allowlist_root.root, allow_compare)
+#define allow_walk(action)                  \
+    twalk(allowlist_root.root, (action))
 
-static mutex_t allowlist_mutex  = MUTEX_INITIALIZER;
-static bool    allowlist_inited = false;
-static FILE   *allowlist_stream = NULL;
-
-static ALLOWTREE allowlist_root = {NULL};
-
-#define ALLOWLIST                           (&allowlist_root)
 #define ALLOWLIST_FILENAME                  \
     (redfat_config->filename.allowlist)
 
@@ -236,20 +230,26 @@ static void redfat_allowlist_read(FILE *file, const char *filename)
             return;
         node->addr  = addr;
         node->allow = allow;
-        allow_insert(ALLOWLIST, node);
+        allow_insert(node);
     }
 }
 
 /*
  * Lowfat allow-list write.
  */
-static void redfat_allowlist_write(FILE *stream, const ALLOWNODE *node)
+static FILE *allowlist_write_stream = NULL;
+static void redfat_allowlist_write(const void *nodep, const VISIT which,
+    const int depth)
 {
-    if (node == NULL)
-        return;
-    redfat_allowlist_write(stream, node->entry.left);
-    fprintf(stream, "%p %d\n", node->addr, (int)node->allow);
-    redfat_allowlist_write(stream, node->entry.right);
+    switch (which)
+    {
+        case postorder: case leaf:
+            break;
+        default:
+            return;
+    }
+    const ALLOWNODE *node = *(ALLOWNODE **)nodep;
+    fprintf(allowlist_write_stream, "%p %d\n", node->addr, (int)node->allow);
 }
 
 /*
@@ -260,7 +260,6 @@ static void redfat_allowlist_init(void)
     const char *allowlist_filename = ALLOWLIST_FILENAME;
     fprintf(stderr, "REDFAT LOG: reading allow-list \"%s\"\n",
         allowlist_filename);
-    ALLOWLIST->root = NULL;
     int fd = open(allowlist_filename, O_RDWR | O_CREAT | O_CLOEXEC,
         S_IRUSR | S_IWUSR);
     if (fd < 0)
@@ -296,13 +295,13 @@ static void redfat_allowlist_fini(void)
     if (ftruncate(fileno(stream), 0) < 0)
         redfat_error("failed to trunacte allow-list stream \"%s\": %s",
             allowlist_filename, strerror(errno));
-    ALLOWTREE *allowlist = ALLOWLIST;
     fputs("# RedFat ALLOWLIST\n", stream);
     fputs("# 0 = Redzone-only\n", stream);
     fputs("# 1 = Lowfat+Redzone\n", stream);
     fputs("# 2 = Nonfat\n", stream);
     fputs("# 3 = Not reached\n\n", stream);
-    redfat_allowlist_write(stream, allowlist->root);
+    allowlist_write_stream = stream;
+    allow_walk(redfat_allowlist_write);
     fclose(stream);
 }
 
@@ -355,7 +354,7 @@ void redfat_allowlist_check(const void *instr_addr, intptr_t ptr_base_0,
         {
             ALLOWNODE key;
             key.addr = instr_addr;
-            ALLOWNODE *node = allow_find(ALLOWLIST, &key);
+            ALLOWNODE *node = allow_find(&key);
             if (node == NULL || node->allow != 0)
             {
                 redfat_warning("potential false-postive detected!\n"
@@ -384,7 +383,7 @@ void redfat_allowlist_check(const void *instr_addr, intptr_t ptr_base_0,
     ALLOWNODE key;
     key.addr = instr_addr;
 
-    ALLOWNODE *node = allow_find(ALLOWLIST, &key);
+    ALLOWNODE *node = allow_find(&key);
     if (node == NULL)
     {
         redfat_log("reached %p (%d) [%s]", instr_addr, allow,
@@ -395,7 +394,7 @@ void redfat_allowlist_check(const void *instr_addr, intptr_t ptr_base_0,
                 strerror(errno));
         node->addr  = instr_addr;
         node->allow = allow;
-        allow_insert(ALLOWLIST, node);
+        allow_insert(node);
     }
     else if (allow < node->allow)
     {
@@ -412,32 +411,26 @@ void redfat_allowlist_check(const void *instr_addr, intptr_t ptr_base_0,
 /* DEBUG                                                        */
 /****************************************************************/
 
-struct DEBUGNODE;
-typedef struct DEBUGNODE DEBUGNODE;
 struct DEBUGTREE
 {
-    DEBUGNODE *root;
+    void *root;
 };
-typedef struct DEBUGTREE DEBUGTREE;
-struct DEBUGNODE
+static mutex_t debug_mutex  = MUTEX_INITIALIZER;
+static DEBUGTREE debug_root = {NULL};
+
+static int debug_compare(const void *n, const void *m)
 {
-    RB_ENTRY(DEBUGNODE) entry;
-    const void *addr;
-    int color;
-};
-static int debug_compare(const DEBUGNODE *n, const DEBUGNODE *m)
-{
-    if (n->addr < m->addr)
+    if (n < m)
         return -1;
-    if (n->addr > m->addr)
+    if (n > m)
         return 1;
     return 0;
 }
-RB_GENERATE_STATIC(DEBUGTREE, DEBUGNODE, entry, debug_compare);
-#define debug_find(t, n)            DEBUGTREE_RB_FIND((t), (n))
-#define debug_insert(t, n)          DEBUGTREE_RB_INSERT((t), (n))
-static mutex_t debug_mutex  = MUTEX_INITIALIZER;
-static DEBUGTREE debug_root = {NULL};
+
+#define debug_find(key)             \
+	(tfind((key), &debug_root.root, debug_compare) != NULL)
+#define debug_insert(key)           \
+    (void)tsearch((key), &debug_root.root, debug_compare)
 
 /*
  * Lowfat debug check.
@@ -461,29 +454,18 @@ void redfat_debug_check(const void *addr, intptr_t ptr_base_0,
     {
         if (mutex_lock(&debug_mutex) == 0)
         {
-            DEBUGNODE key;
-            key.addr = addr;
-            DEBUGNODE *node = debug_find(&debug_root, &key);
-            if (node != NULL)
+            if (debug_find(addr))
             {
                 // Memory error already reported, so ignore.
                 mutex_unlock(&debug_mutex);
                 return;
             }
-            node = (DEBUGNODE *)malloc(sizeof(DEBUGNODE));
-            if (node == NULL)
-            {
-                mutex_unlock(&debug_mutex);
-                redfat_error("failed to allocate %zu bytes for debug node",
-                    sizeof(DEBUGNODE));
-                return;
-            }
-            node->addr = addr;
-            debug_insert(&debug_root, node);
+            debug_insert(addr);
             mutex_unlock(&debug_mutex);
         }
 
-        const uint8_t *access_base   = (const uint8_t *)redfat_base(ptr_access);
+        const uint8_t *access_base   =
+            (const uint8_t *)redfat_base(ptr_access);
         size_t access_size           = *(const size_t *)access_base;
         bool access_free             = (access_size == 0x0);
         access_size                  =

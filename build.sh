@@ -32,7 +32,7 @@ fi
 
 set -e
 
-E9_VERSION=39238830c3ba90d80b6996f05c872a7f8f042003
+E9_VERSION=9b52be22d31a3c55b5b7e132fd9117ec82e4a3f4
 LIB_VERSION=1c8c703303e6de11b6a6abd67323b5556e25c57f
 
 # STEP (1): install dependencies if necessary:
