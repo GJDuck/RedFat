@@ -5,7 +5,7 @@
  *     |  _ <  __/ (_| |  _| (_| | |_ 
  *     |_| \_\___|\__,_|_|  \__,_|\__| BINARY HARDENING SYSTEM
  *
- * Copyright (C) 2022 National University of Singapore
+ * Copyright (C) 2023 National University of Singapore
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -31,24 +31,36 @@
 #define REDFAT_NOINLINE         __attribute__((__noinline__))
 #define REDFAT_NORETURN         __attribute__((__noreturn__))
 
-#define RED     "\33[31m"
-#define GREEN   "\33[32m"
-#define YELLOW  "\33[33m"
-#define MAGENTA "\33[35m"
-#define WHITE   "\33[0m"
+#define RED     (redfat_option_isatty? "\33[31m": "")
+#define GREEN   (redfat_option_isatty? "\33[32m": "")
+#define YELLOW  (redfat_option_isatty? "\33[33m": "")
+#define MAGENTA (redfat_option_isatty? "\33[35m": "")
+#define WHITE   (redfat_option_isatty? "\33[0m" : "")
 
 #define REDFAT_MESSAGE_LOG          0
 #define REDFAT_MESSAGE_WARNING      1
 #define REDFAT_MESSAGE_ERROR        2
 
-static bool redfat_isatty         = false;
-static bool redfat_disabled       = false;
-static bool redfat_dso            = false;
+static bool redfat_option_isatty   = false;
+static bool redfat_option_disabled = false;
+static bool redfat_option_dso      = false;
+static int  redfat_option_log      = 0;
+static int  redfat_option_signal   = 0;
 static mutex_t redfat_print_mutex = MUTEX_INITIALIZER;
 
 extern uint8_t __executable_start[];
 #define redfat_config                                               \
     ((const struct redfat *)(__executable_start - REDFAT_PAGE_SIZE))
+
+/*
+ * Abort.
+ */
+static REDFAT_NORETURN void redfat_abort(void)
+{
+    if (redfat_option_signal >= 1 && redfat_option_signal <= _NSIG)
+        raise(redfat_option_signal);
+    abort();
+}
 
 /*
  * Print the redfat banner.
@@ -61,8 +73,7 @@ static REDFAT_NOINLINE void redfat_print_banner(const char *color)
         "_|_|_|    _|_|_|    _|    _|  _|_|_|_|  _|    _|    _|\n"
         "_|    _|  _|        _|    _|    _|      _|    _|    _|\n"
         "_|    _|  _|_|_|_|  _|_|_|      _|        _|_|_|      _|_|%s\n"
-        "\n",
-        (redfat_isatty? color: ""), (redfat_isatty? WHITE: ""));
+        "\n", color, WHITE);
 }
 
 /*
@@ -71,6 +82,8 @@ static REDFAT_NOINLINE void redfat_print_banner(const char *color)
 static REDFAT_NOINLINE void redfat_message(const char *format, int msg,
     va_list ap)
 {
+    if (redfat_option_log < 1)
+        return;
     if (mutex_lock(&redfat_print_mutex) < 0)
         return;
 
@@ -87,9 +100,7 @@ static REDFAT_NOINLINE void redfat_message(const char *format, int msg,
             break;
     }
     fprintf_unlocked(stderr, "%sREDFAT %s%s: ",
-        (redfat_isatty? color: ""),
-        type,
-        (redfat_isatty? WHITE: ""));
+        color, type, WHITE);
     vfprintf_unlocked(stderr, format, ap);
     fputc_unlocked('\n', stderr);
     fflush_unlocked(stderr);
@@ -107,7 +118,7 @@ static REDFAT_NOINLINE REDFAT_NORETURN void redfat_error(const char *format, ...
     va_start(ap, format);
     redfat_message(format, REDFAT_MESSAGE_ERROR, ap);
     va_end(ap);
-    abort();
+    redfat_abort();
 }
 
 /*
@@ -125,7 +136,7 @@ static REDFAT_NOINLINE void redfat_warning(const char *format, ...)
 /*
  * Print a log message.
  */
-#define _redfat_log     _redfat_log
+#define redfat_log      _redfat_log
 static REDFAT_NOINLINE void redfat_log(const char *format, ...)
 {
     va_list ap;
@@ -179,7 +190,7 @@ static inline ALLOWNODE *allow_find(const ALLOWNODE *key)
     (redfat_config->filename.allowlist)
 
 /*
- * Lowfat allow-list parse.
+ * Redfat allow-list parse.
  */
 static void redfat_allowlist_read(FILE *file, const char *filename)
 {
@@ -235,7 +246,7 @@ static void redfat_allowlist_read(FILE *file, const char *filename)
 }
 
 /*
- * Lowfat allow-list write.
+ * Redfat allow-list write.
  */
 static FILE *allowlist_write_stream = NULL;
 static void redfat_allowlist_write(const void *nodep, const VISIT which,
@@ -258,8 +269,9 @@ static void redfat_allowlist_write(const void *nodep, const VISIT which,
 static void redfat_allowlist_init(void)
 {
     const char *allowlist_filename = ALLOWLIST_FILENAME;
-    fprintf(stderr, "REDFAT LOG: reading allow-list \"%s\"\n",
-        allowlist_filename);
+    if (redfat_option_log >= 2)
+        fprintf(stderr, "REDFAT LOG: reading allow-list \"%s\"\n",
+            allowlist_filename);
     int fd = open(allowlist_filename, O_RDWR | O_CREAT | O_CLOEXEC,
         S_IRUSR | S_IWUSR);
     if (fd < 0)
@@ -286,8 +298,9 @@ static void redfat_allowlist_fini(void)
         return;
 
     const char *allowlist_filename = ALLOWLIST_FILENAME;
-    fprintf(stderr, "REDFAT LOG: writing allow-list \"%s\"\n",
-        allowlist_filename);
+    if (redfat_option_log >= 2)
+        fprintf(stderr, "REDFAT LOG: writing allow-list \"%s\"\n",
+            allowlist_filename);
     FILE *stream = allowlist_stream;
     if (fseek(stream, 0, SEEK_SET) < 0)
         redfat_error("failed to rewind allow-list stream \"%s\": %s",
@@ -325,7 +338,7 @@ static void *redfat_base(const void *ptr_base, const void *ptr_access)
 }
 
 /*
- * Lowfat allow-list generation.
+ * Redfat allow-list generation.
  */
 void redfat_allowlist_check(const void *instr_addr, intptr_t ptr_base_0,
     const void *ptr_access, size_t access_size, const char *asm_str)
@@ -369,12 +382,12 @@ void redfat_allowlist_check(const void *instr_addr, intptr_t ptr_base_0,
                     lb_access,
                     ub_access,
                     access_size,
-                    (redfat_isatty? GREEN: ""),
+                    GREEN,
                     asm_str,
-                    (redfat_isatty? WHITE: ""),
-                    (redfat_isatty? YELLOW: ""),
+                    WHITE,
+                    YELLOW,
                     instr_addr,
-                    (redfat_isatty? WHITE: ""));
+                    WHITE);
             }
             allow = ALLOW_REDZONE;
         }
@@ -428,12 +441,12 @@ static int debug_compare(const void *n, const void *m)
 }
 
 #define debug_find(key)             \
-	(tfind((key), &debug_root.root, debug_compare) != NULL)
+    (tfind((key), &debug_root.root, debug_compare) != NULL)
 #define debug_insert(key)           \
     (void)tsearch((key), &debug_root.root, debug_compare)
 
 /*
- * Lowfat debug check.
+ * Redfat debug check.
  */
 void redfat_debug_check(const void *addr, intptr_t ptr_base_0,
     const void *ptr_access, size_t size_access, const char *asm_str)
@@ -496,12 +509,12 @@ void redfat_debug_check(const void *addr, intptr_t ptr_base_0,
             "\tbase.ptr    = %p (%+ld)\n"
             "\tbase.obj    = [%+ld..%+ld]%s\n",
             kind,
-            (redfat_isatty? GREEN: ""),
+            GREEN,
             asm_str,
-            (redfat_isatty? WHITE: ""),
-            (redfat_isatty? YELLOW: ""),
+            WHITE,
+            YELLOW,
             addr,
-            (redfat_isatty? WHITE: ""),
+            WHITE,
             ptr_access,
             size_access,
             access_obj_lb - (const uint8_t *)ptr_access,
@@ -525,11 +538,37 @@ void redfat_debug_check(const void *addr, std::nullptr_t ptr_base,
 }
 
 /*
- * Lowfat error handler.
+ * Redfat error handler.
  */
 static void redfat_sigaction_handler(int sig, siginfo_t *info, void *context)
 {
     redfat_error("out-of-bounds/use-after-free error detected!");
+}
+
+/*
+ * Get an option value.
+ */
+static ssize_t redfat_get_option(const char *option, ssize_t lb, ssize_t ub,
+    ssize_t _default)
+{
+    const char *val = getenv(option);
+    if (val == NULL)
+        return _default;
+    if (strcmp(val, "true") == 0)
+        return 1;
+    if (strcmp(val, "false") == 0)
+        return 0;
+    errno = 0;
+    char *end = NULL;
+    ssize_t r = strtoll(val, &end, 0);
+    if ((r == 0 && errno != 0) || end == NULL || end[0] != '\0')
+        redfat_error("failed to parse value \"%s\" for option %s",
+            val, option);
+    if (r < lb || r > ub)
+        redfat_error("failed to parse value for option %s; "
+            "value %zd is outside the expected range %zd..%zd",
+            option, r, lb, ub);
+    return r;
 }
 
 /*
@@ -542,10 +581,14 @@ void init(int argc, char **argv, char **envp, void *dynamic,
     const struct e9_config_s *config)
 {
     environ = envp;
-    redfat_disabled = (getenv("REDFAT_DISABLE") != NULL);
-    redfat_isatty = isatty(STDERR_FILENO);
+    redfat_option_log = 2;
+    redfat_option_log = redfat_get_option("REDFAT_LOG", 0, 10, 2);
+    redfat_option_disabled = redfat_get_option("REDFAT_DISABLE", 0, 1, false);
+    redfat_option_signal = redfat_get_option("REDFAT_SIGNAL", 1, _NSIG,
+        SIGABRT);
+    redfat_option_isatty = isatty(STDERR_FILENO);
     if ((config->flags & E9_FLAG_EXE) == 0)
-        redfat_dso = true;
+        redfat_option_dso = true;
 
     const intptr_t SIZES   = 0x100000;
     const intptr_t MAGICS  = 0x180000;
@@ -569,7 +612,7 @@ void init(int argc, char **argv, char **envp, void *dynamic,
     if (msync((void *)MAGICS, REDFAT_PAGE_SIZE, MS_ASYNC) == 0 ||
             errno != ENOMEM)
     {
-        if (redfat_dso || redfat_disabled)
+        if (redfat_option_dso || redfat_option_disabled)
             return;
         struct sigaction action;
         memset(&action, 0x0, sizeof(action));
@@ -583,12 +626,11 @@ void init(int argc, char **argv, char **envp, void *dynamic,
 
     // We are not running with libredfat.so.  Warn the user, and map
     // dummy tables so the instrumentation will not crash.
-    if (!redfat_disabled && !redfat_dso)
+    if (!redfat_option_disabled && !redfat_option_dso)
         redfat_error("the REDFAT runtime (%slibredfat.so%s) has not been "
             "LD_PRELOAD'ed\n"
             "              (define REDFAT_DISABLE=1 to disable this error "
-                "message)",
-            (redfat_isatty? GREEN: ""), (redfat_isatty? WHITE: ""));
+                "message)", GREEN, WHITE);
     r = (intptr_t)mmap((void *)MAGICS, SIZE, PROT_READ,
         MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0);
     if (r != MAGICS)
@@ -614,8 +656,9 @@ void fini(void)
 {
     redfat_allowlist_fini();
 
-    if ((redfat_config->flags & REDFAT_FLAG_PROFILE) == 0 || redfat_disabled ||
-            redfat_dso)
+    if ((redfat_config->flags & REDFAT_FLAG_PROFILE) == 0 ||
+            redfat_option_disabled || redfat_option_dso ||
+            redfat_option_log < 2)
         return;
     ssize_t maxrss = -1;
     ssize_t utime  = -1;
@@ -630,8 +673,7 @@ void fini(void)
 
     const size_t *profile = (const size_t *)REDFAT_PROFILE;
     redfat_print_banner(MAGENTA);
-    fprintf(stderr, "%sREDFAT STATS%s:\n\n",
-		(redfat_isatty? RED: ""), (redfat_isatty? WHITE: ""));
+    fprintf(stderr, "%sREDFAT STATS%s:\n\n", RED, WHITE);
     fprintf(stderr, "total.time     = %zdms\n", utime + stime);
     fprintf(stderr, "total.maxrss   = %zdkB\n", maxrss);
     fprintf(stderr, "redzone.checks = %zu (%zureads + %zuwrites)\n",

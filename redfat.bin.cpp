@@ -5,7 +5,7 @@
  *     |  _ <  __/ (_| |  _| (_| | |_ 
  *     |_| \_\___|\__,_|_|  \__,_|\__| BINARY HARDENING SYSTEM
  *
- * Copyright (C) 2022 National University of Singapore
+ * Copyright (C) 2023 National University of Singapore
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -112,6 +112,7 @@ enum Option
     OPTION_OFRAME,
     OPTION_OGLOBALS,
     OPTION_OSYSV,
+    OPTION_OCFR,
     OPTION_FORCE,
     OPTION_HELP,
     OPTION_VERSION,
@@ -195,6 +196,8 @@ static void usage(const char *progname)
         "\t\t[enabled]\n"
         "\t-Osysv (-Osysv=false)\n"
         "\t\tEnable (disable) SYSV ABI optimization [disabled]\n"
+        "\t-OCFR (-OCFR=false)\n"
+        "\t\tEnable (disable) Control-Flow-Recovery (CFR) mode [disabled]\n"
         "\t-force (-force=false)\n"
         "\t\tEnable (disable) instrumentation even for incompatible\n"
         "\t\tbinaries [disabled]\n"
@@ -237,6 +240,7 @@ int main(int argc, char **argv)
         {"Oframe",         optional_argument, nullptr, OPTION_OFRAME},
         {"Oglobal",        optional_argument, nullptr, OPTION_OGLOBALS},
         {"Osysv",          optional_argument, nullptr, OPTION_OSYSV},
+        {"OCFR",           optional_argument, nullptr, OPTION_OCFR},
         {"force",          optional_argument, nullptr, OPTION_FORCE},
         {"help",           no_argument,       nullptr, OPTION_HELP},
         {"version",        no_argument,       nullptr, OPTION_VERSION},
@@ -265,6 +269,7 @@ int main(int argc, char **argv)
     bool option_oframe                 = false;
     bool option_oglobals               = true;
     bool option_osysv                  = false;
+    bool option_ocfr                   = false;
     bool option_force                  = false;
     bool option_profile                = false;
     bool option_verbose                = false;
@@ -345,6 +350,9 @@ int main(int argc, char **argv)
                 break;
             case OPTION_OSYSV:
                 option_osysv = strToBool(optarg);
+                break;
+            case OPTION_OCFR:
+                option_ocfr = strToBool(optarg);
                 break;
             case OPTION_FORCE:
                 option_force = strToBool(optarg);
@@ -480,6 +488,11 @@ int main(int argc, char **argv)
     command += '/';
     command += "e9tool";
     command += '\"';
+    if (option_ocfr)
+    {
+        command += ' ';
+        command += "-CFR";
+    }
     command += ' ';
     command += "-o \"";
     command += output;

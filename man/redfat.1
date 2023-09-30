@@ -11,7 +11,7 @@
 .ft R
 .fi
 ..
-.TH "REDFAT" 1 "2022-03-01" "" "redfat"
+.TH "REDFAT" 1 "" "" "redfat"
 .SH NAME
 \fBredfat\fR \- binary hardening system
 .SH SYNOPSIS
@@ -35,6 +35,7 @@ redfat [\fB-Xlowfat\fR[={true|false}]]
        [\fB-Oframe\fR[={true|false}]]
        [\fB-Oglobal\fR[={true|false}]]
        [\fB-Osysv\fR[={true|false}]]
+       [\fB-OCFR\fR[={true|false}]]
        [\fB-force\fR[={true|false}]]
        [\fB-o\fR=outfile]
        [\fB-P\fR]
@@ -233,6 +234,12 @@ The default is \fBenabled\fR.
 Enables (disables) additional optimizations assuming that the binary follows
 the Sys V ABI.
 This only has a very small impact, so the default is \fBdisabled\fR.
+.TP
+\fB-OCFR\fR[={true|false}]
+Enables (disables) Control Flow Recovery (CFR) mode.
+This makes the rewritten binaries faster, but may introduce rewriting
+errors.
+The default is \fBdisabled\fR.
 .TP
 \fB-force\fR[={true|false}]
 Enables (disables) forcibly instrumenting the binary, even when the binary is

@@ -140,6 +140,11 @@ The main *optimization* options are:
 * `-Omerge` (`-Omerge=false`):
   In a given batch, attempt to merge checks where possible.
   Default: *enabled*.
+* `-OCFR` (`-OCFR=false`):
+  Enables (disables) *Control Flow Recovery* (CFR) mode.
+  This makes the rewritten binaries faster, but may introduce rewriting
+  errors.
+  Default: *disabled*.
 
 The main *allow-list* options are:
 
@@ -213,6 +218,11 @@ environment variables:
 * `REDFAT_ASLR=1`: Enables *Address Space Layout Randomization* (ASLR) for
   heap allocations.
   Default: *enabled*.
+* `REDFAT_SIGNAL=SIG`: If an error occurs, raise signal `SIG` to terminate
+  the program (or else fall back to abort).
+  Default: `SIGABRT`.
+* `REDFAT_LOG=N`: Set `N` to be the log-level.
+  Default: 2.
 
 ## Debugging Mode
 
